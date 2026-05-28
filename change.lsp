@@ -1,13 +1,14 @@
 ;; ============================================================================
-;; change.lsp  —  使用 LAYMRG 合并图层 (v2.0)
+;; change.lsp  —  使用 LAYMRG 合并图层 (v2.1)
 ;; ============================================================================
 ;;  用法: (load "D:/桌面/CAD-/change.lsp") → CHG → 回车
 ;;
 ;;  功能:
-;;    1. 检查 wall / window 图层是否存在，不存在则创建
-;;    2. PUB_WALL + BS-承重墙柱 → LAYMRG 合并到 0 图层
-;;    3. DS-门窗 → LAYMRG 合并到 window 图层
-;;    4. 将 0 图层中的对象（块定义除外）转移到 wall 图层
+;;    1. 检查 wall / window 图层，不存在则创建
+;;    2. PUB_WALL + BS-承重墙柱 → LAYMRG 合并到 0
+;;    3. DS-门窗 → LAYMRG 合并到 window
+;;    4. 将 0 图层的对象转移到 wall
+;;    5. 清理残留的空图层
 ;; ============================================================================
 
 (defun c:CHG (/ *error* doc layers ss n)
@@ -21,7 +22,7 @@
   (setq layers (vla-get-Layers doc))
 
   (princ "\n========================================")
-  (princ "\n  change.lsp v2.0 — LAYMRG 图层合并")
+  (princ "\n  change.lsp v2.1 — LAYMRG 图层合并")
   (princ "\n========================================")
 
   ;; ============================================================
@@ -109,6 +110,35 @@
   )
 
   ;; ============================================================
+  ;; 第5步: 清理残留的空图层
+  ;;   当旧图层实体已被其他脚本移走但图层名还在时，直接删除
+  ;; ============================================================
+  (princ "\n\n[5/5] 清理残留空图层...")
+
+  (foreach source '("PUB_WALL" "BS-承重墙柱" "DS-门窗")
+    (if (not (vl-catch-all-error-p
+               (vl-catch-all-apply 'vla-item (list layers source))))
+      (progn
+        ;; 图层存在 → 检查是否有实体
+        (setq ss (ssget "X" (list (cons 8 source))))
+        (if (not ss)
+          ;; 无实体 → 安全删除 (不是当前层、不是 0/Defpoints)
+          (progn
+            (if (not (member (strcase source) '("0" "DEFPOINTS")))
+              (progn
+                (vl-catch-all-apply 'vla-delete
+                  (list (vla-item layers source)))
+                (princ (strcat "\n  已删除空图层: [" source "]"))
+              ))
+          )
+          (princ (strcat "\n  图层 [" source "] 仍有 "
+                         (itoa (sslength ss)) " 个实体，未删除"))
+        )
+      )
+    )
+  )
+
+  ;; ============================================================
   ;; 验证结果
   ;; ============================================================
   (princ "\n\n--- 验证 ---")
@@ -147,11 +177,12 @@
 ;; 加载提示
 ;; ============================================================
 (princ "\n========================================")
-(princ "\n change.lsp v2.0 已加载")
+(princ "\n change.lsp v2.1 已加载")
 (princ "\n 输入 CHG 一键合并图层")
 (princ "\n   [1] 确保 wall / window 图层存在")
 (princ "\n   [2] PUB_WALL + BS-承重墙柱 → 0")
 (princ "\n   [3] DS-门窗 → window")
 (princ "\n   [4] 0 图层对象 → wall")
+(princ "\n   [5] 清理残留空图层")
 (princ "\n========================================")
 (princ)
